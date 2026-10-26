@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>a model in this tab</title>
+<button id="go">LOAD AND ASK</button>
+<pre id="out">press the button.</pre>
+
+<script type="module">
+    import { CreateMLCEngine } from
+            "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/lib/index.js";
+
+    const out = document.getElementById("out");
+    const say = (t) => { out.textContent = t; };
+
+    document.getElementById("go").onclick = async () => {
+
+        // ── 1. the engine. The first call downloads the weights; every call
+        //       after this one reads them straight out of the cache. ──────────
+        const engine = await CreateMLCEngine(
+            "Qwen3.5-2B-q4f16_1-MLC",
+            { initProgressCallback: (r) => say(r.text) },   // the load messages
+            { context_window_size: 8192 },
+        );
+
+        // ── 2. the request. The same shape as an OpenAI chat completion,
+        //       because that is the shape this engine speaks. ────────────────
+        const stream = await engine.chat.completions.create({
+            messages: [
+                { role: "system", content: "Answer in one sentence." },
+                { role: "user", content: "Why is the sky blue?" },
+            ],
+            stream: true,
+            max_tokens: 512,
+            // Qwen will otherwise deliberate for a page before answering, and on a
+            // 2B in a tab you feel every token of it.
+            extra_body: { enable_thinking: false },
+        });
+
+        // ── 3. the tokens, as they arrive. Nothing here touches the network. ─
+        let text = "";
+        for await (const chunk of stream) {
+            text += chunk.choices[0]?.delta?.content || "";
+            say(text);
+        }
+    };
+</script>
